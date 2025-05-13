@@ -65,18 +65,32 @@ class KAN(nn.Module):
                         plt.savefig(f"{folder}/sp_{l}_{i}_{j}.png", bbox_inches="tight", dpi=150)
                         plt.close()
 
-    def fit_qsp_params(self, x_tensor, y_tensor, initial_params, maxiter=100):
-        def qsp_cost_function(qsp_params_flat):
-            qsp_params = np.array(qsp_params_flat)
-            with torch.no_grad():
-                y_pred = self(x_tensor, qsp_params)
-                loss = torch.mean((y_pred - y_tensor) ** 2)
-            return loss.item()
+    def fit_qsp_with_alphas(self, x_tensor, y_tensor, qsp_depth=10, maxiter=100):
+        num_samples = x_tensor.shape[0]
+        num_qsp_params = 2 * qsp_depth + 1
 
-        result = minimize(
-            qsp_cost_function,
-            initial_params,
-            method='L-BFGS-B',
-            options={'maxiter': maxiter}
-        )
+        # Initialize QSP parameters and alphas
+        init_qsp_params = np.random.uniform(0, 2 * np.pi, num_qsp_params)
+        init_alphas = np.random.uniform(0.5, 1.5, size=num_samples)
+        init_params = np.concatenate([init_qsp_params, init_alphas])
+
+        def cost_fn(params):
+            qsp_params = params[:num_qsp_params]
+            alphas = params[num_qsp_params:]
+            error = 0.0
+
+            with torch.no_grad():
+                for i in range(num_samples):
+                    x_i = x_tensor[i].unsqueeze(0)  # shape [1, D]
+                    y_true = y_tensor[i].item()
+                    alpha = alphas[i]
+
+                    exp_val = self(x_i, qsp_params=qsp_params).item()  # scalar
+                    y_pred = alpha * exp_val
+                    error += (y_true - y_pred) ** 2
+
+            return error / num_samples
+
+        result = minimize(cost_fn, init_params, method='L-BFGS-B', options={'maxiter': maxiter})
         return result
+
