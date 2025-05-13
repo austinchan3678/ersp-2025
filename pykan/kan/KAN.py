@@ -1,11 +1,14 @@
+
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
 import os
+import numpy as np
+from scipy.optimize import minimize
 from .KANLayer import KANLayer
 
 class KAN(nn.Module):
-    def __init__(self, width, seed=0, device='cpu', use_qsp=False, **kwargs):
+    def __init__(self, width, seed=0, device='cpu', use_qsp=True, **kwargs):
         super(KAN, self).__init__()
 
         torch.manual_seed(seed)
@@ -27,17 +30,9 @@ class KAN(nn.Module):
         self.layers = nn.ModuleList(layers)
         self.to(device)
 
-    def forward(self, x):
-        preacts_all = []
-        postacts_all = []
-        postsplines_all = []
-
+    def forward(self, x, qsp_params=None):
         for layer in self.layers:
-            x, preacts, postacts, postspline = layer(x)
-            preacts_all.append(preacts)
-            postacts_all.append(postacts)
-            postsplines_all.append(postspline)
-
+            x, _, _, _ = layer(x, qsp_params)
         return x
 
     def to(self, device):
@@ -70,48 +65,18 @@ class KAN(nn.Module):
                         plt.savefig(f"{folder}/sp_{l}_{i}_{j}.png", bbox_inches="tight", dpi=150)
                         plt.close()
 
-    def fit(self, dataset, opt="LBFGS", steps=50, lamb=0.0, verbose=True):
-        """
-        Train the model on the given dataset.
+    def fit_qsp_params(self, x_tensor, y_tensor, initial_params, maxiter=100):
+        def qsp_cost_function(qsp_params_flat):
+            qsp_params = np.array(qsp_params_flat)
+            with torch.no_grad():
+                y_pred = self(x_tensor, qsp_params)
+                loss = torch.mean((y_pred - y_tensor) ** 2)
+            return loss.item()
 
-        Args:
-            dataset (dict): Must have 'train_input' and 'train_output' keys with torch tensors.
-            opt (str): Optimizer ("LBFGS" or "Adam").
-            steps (int): Number of optimization steps.
-            lamb (float): L2 regularization coefficient.
-            verbose (bool): Print loss during training.
-        """
-        x = dataset['train_input'].to(self.device)
-        y_true = dataset['train_output'].to(self.device)
-
-        if opt == "LBFGS":
-            optimizer = torch.optim.LBFGS(self.parameters(), max_iter=steps)
-
-            def closure():
-                optimizer.zero_grad()
-                y_pred = self(x)
-                loss = torch.mean((y_pred - y_true) ** 2)
-                if lamb > 0:
-                    reg = sum(torch.sum(p ** 2) for p in self.parameters())
-                    loss += lamb * reg
-                loss.backward()
-                return loss
-
-            optimizer.step(closure)
-
-        elif opt == "Adam":
-            optimizer = torch.optim.Adam(self.parameters(), lr=0.01)
-            for step in range(steps):
-                optimizer.zero_grad()
-                y_pred = self(x)
-                loss = torch.mean((y_pred - y_true) ** 2)
-                if lamb > 0:
-                    reg = sum(torch.sum(p ** 2) for p in self.parameters())
-                    loss += lamb * reg
-                loss.backward()
-                optimizer.step()
-                if verbose and step % 10 == 0:
-                    print(f"Step {step}: Loss = {loss.item():.6f}")
-        else:
-            raise ValueError(f"Unknown optimizer: {opt}")
-
+        result = minimize(
+            qsp_cost_function,
+            initial_params,
+            method='L-BFGS-B',
+            options={'maxiter': maxiter}
+        )
+        return result
