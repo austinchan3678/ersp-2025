@@ -20,7 +20,7 @@ class KAN(nn.Module):
                 in_dim=width[i],
                 out_dim=width[i+1],
                 device=device,
-                **kwargs  # pass scale_base_mu, scale_base_sigma, sb_trainable, etc.
+                **kwargs
             )
             layers.append(layer)
 
@@ -38,7 +38,7 @@ class KAN(nn.Module):
             postacts_all.append(postacts)
             postsplines_all.append(postspline)
 
-        return x  # or return all if needed
+        return x
 
     def to(self, device):
         super(KAN, self).to(device)
@@ -46,15 +46,8 @@ class KAN(nn.Module):
         for layer in self.layers:
             layer.to(device)
         return self
-    
+
     def plot(self, folder="./figures", sample=False):
-        """ 
-        Plot the learned functions (activations) for each neuron in the network.
-        
-        Args:
-            folder (str): Directory to save the plots.
-            sample (bool): If True, plot dots instead of a line.
-        """
         if not os.path.exists(folder):
             os.makedirs(folder)
 
@@ -82,17 +75,18 @@ class KAN(nn.Module):
         Train the model on the given dataset.
 
         Args:
-            dataset (dict): Must have 'train_input' and 'train_label' keys with torch tensors.
+            dataset (dict): Must have 'train_input' and 'train_output' keys with torch tensors.
             opt (str): Optimizer ("LBFGS" or "Adam").
             steps (int): Number of optimization steps.
             lamb (float): L2 regularization coefficient.
             verbose (bool): Print loss during training.
         """
         x = dataset['train_input'].to(self.device)
-        y_true = dataset['train_label'].to(self.device)
+        y_true = dataset['train_output'].to(self.device)
 
         if opt == "LBFGS":
             optimizer = torch.optim.LBFGS(self.parameters(), max_iter=steps)
+
             def closure():
                 optimizer.zero_grad()
                 y_pred = self(x)
@@ -102,6 +96,7 @@ class KAN(nn.Module):
                     loss += lamb * reg
                 loss.backward()
                 return loss
+
             optimizer.step(closure)
 
         elif opt == "Adam":
@@ -119,3 +114,4 @@ class KAN(nn.Module):
                     print(f"Step {step}: Loss = {loss.item():.6f}")
         else:
             raise ValueError(f"Unknown optimizer: {opt}")
+
