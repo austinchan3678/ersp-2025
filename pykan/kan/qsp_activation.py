@@ -117,5 +117,4 @@ class QSPActivation:
             for j in range(x_np.shape[1]):
                 out[i, j] = expectation_value(params_np, x_np[i, j], self.depth)
 
-        return torch.tensor(out, dtype=torch.float32, device=self.device)
-'''
+        return torch.tensor(out, dtype=torch.float32, device=self.device)'''
