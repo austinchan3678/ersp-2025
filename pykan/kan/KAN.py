@@ -52,16 +52,34 @@ class KAN(nn.Module):
 
 # BESSEL KERNEL APPROXIMATION NETWORK (KAN)
 import numpy as np
+import os
 import torch
 import torch.nn as nn
 from scipy.optimize import minimize
 from .qsp_activation import expectation_value
+from .KANLayer import KANLayer
 
 class KAN(nn.Module):
-    def __init__(self, qsp_depth=10):
+    def __init__(self, width, qsp_depth=10, device='cpu'):
         super().__init__()
+        self.depth = len(width) - 1
+        self.width = width
+        self.device = device
         self.qsp_depth = qsp_depth
         self.num_qsp_params = 2 * qsp_depth + 1
+
+        layers = []
+        for i in range(self.depth):
+            layer = KANLayer(
+                in_dim=width[i],
+                out_dim=width[i+1],
+                device=device
+            )
+            layers.append(layer)
+
+        self.layers = nn.ModuleList(layers)
+        self.to(device)
+
 
     def forward(self, x, qsp_params, alphas):
         batch_size = x.shape[0]
