@@ -94,7 +94,7 @@ class KAN(nn.Module):
         return torch.tensor(preds, dtype=torch.float32).unsqueeze(1)
 
 
-    def fit_qsp_with_alphas(self, x_tensor, y_tensor, maxiter=100, cost_fn=None, init_params=None):
+    def fit_qsp_with_alphas(self, x_tensor, y_tensor, maxiter=100, cost_fn=None, init_params=None, ftol=1e-9):
         x_np = x_tensor.cpu().numpy()
         y_np = y_tensor.cpu().numpy()
         n = x_np.shape[0]
@@ -121,7 +121,7 @@ class KAN(nn.Module):
                     preds.append(alpha * expectation_value(qsp_params, theta, depth=self.qsp_depth))
                 return np.mean((y_np.ravel() - np.array(preds)) ** 2)
 
-        result = minimize(cost_fn, init_params, method='L-BFGS-B', options={'maxiter': maxiter})
+        result = minimize(cost_fn, init_params, method='L-BFGS-B', options={'maxiter': maxiter, 'ftol': ftol})
         return result
 
 
