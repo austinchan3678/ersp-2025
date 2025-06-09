@@ -1,4 +1,4 @@
-import torch
+'''import torch
 import torch.nn as nn
 import numpy as np
 from .utils import sparse_mask
@@ -70,5 +70,46 @@ class KANLayer(nn.Module):
                     data[:, i1], data[:, i2] = data[:, i2].clone(), data[:, i1].clone()
 
             swap_(self.scale_base.data, i1, i2, mode=mode)
-            swap_(self.mask.data, i1, i2, mode=mode)
+            swap_(self.mask.data, i1, i2, mode=mode)'''
+
+
+import torch
+import torch.nn as nn
+import numpy as np
+from .qsp_activation import QSPActivation
+
+class KANLayer(nn.Module):
+    def __init__(self, in_dim, out_dim, device=None, sparse_init=False):
+        super(KANLayer, self).__init__()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+        self.scale_base = torch.nn.Parameter(
+            torch.randn(in_dim, out_dim) * (1.0 / np.sqrt(in_dim)),
+            requires_grad=True
+        )
+
+        self.mask = torch.nn.Parameter(
+            torch.ones(in_dim, out_dim), requires_grad=False
+        )
+
+        self.base_fun = QSPActivation(device=self.device)
+        self.to(self.device)
+
+    def forward(self, x, qsp_params=None):
+        batch = x.shape[0]
+        base = self.base_fun(x, params_override=qsp_params)
+        base = base[:, :, None].expand(-1, -1, self.out_dim)
+
+        y = self.scale_base[None, :, :] * base * self.mask[None, :, :]
+        y = torch.sum(y, dim=1)
+        return y, None, None, None
+
+    def prune_weights(self, threshold=1e-3):
+        with torch.no_grad():
+            mask = (self.scale_base.abs() > threshold).float()
+            self.scale_base.data *= mask
+            self.mask.data *= mask
+
 
